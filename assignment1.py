@@ -1,147 +1,118 @@
 import warnings
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn import tree
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.neural_network import MLPClassifier
 from numpy import VisibleDeprecationWarning, genfromtxt
 import numpy as np
 
-np.random.seed(12)
+np.random.seed(13452346)
 
-def KNN(dataset, dtype=int, k_min=1, k_max=5, train_percent=80, num_folds=10):
-    dataframe = genfromtxt(dataset, delimiter=',', dtype=dtype)[1:]
+def Classify(clf, folds):
+    best_model = [None, 0.]
+    num_folds = len(folds)
+    for fold in range(num_folds):
+        mask = np.zeros(num_folds)
+        mask[fold] = True
+        training = np.ma.masked_array(folds, mask=mask)
+        training = np.concatenate(training[~training.mask])
+        validation = folds[fold]
+        X = np.array(training[:, :-1])
+        y = np.array(training[:, -1:].flatten())
+        clf.fit(X, y)
+        predictions = clf.predict(validation[:, :-1])
+        correct_count = 0
+        for i in range(len(predictions)):
+            if predictions[i] == validation[i, -1]:
+                correct_count += 1
+        accuracy = correct_count / len(validation)
+        if accuracy > best_model[1]:
+            best_model = [clf, accuracy]
+        
+    return best_model
 
+
+def Folds(data_location, dtype=int, train_percent=80, num_folds=10):
+    dataframe = genfromtxt(data_location, delimiter=',', dtype=dtype)[1:]
     train_index = round(len(dataframe) * train_percent / 100)
+    training, test = dataframe[:train_index], dataframe[train_index:]
 
     np.random.shuffle(dataframe)
 
-    folds = np.array_split(dataframe[:train_index], num_folds)
+    return (np.array_split(training, num_folds), test)
 
+def Test(model_perf, test):
+
+    final_output = []
+    for item in model_perf:
+        dt_clf = item[1][0]
+
+        predictions = dt_clf.predict(test[:, :-1])
+
+        correct_count = 0
+        for i in range(len(predictions)):
+            if predictions[i] == test[i, -1]:
+                correct_count += 1
+        test_perf = correct_count / len(test)
+
+        final_output.append([item[0], test_perf])
+
+
+    return final_output
+
+
+
+def KNN(folds, k_min=1, k_max=5):
     model_perf = []
     for k in range(k_min, k_max + 1):
         # print(k)
-        model_perf.append([k, []])
         knn_clf = KNeighborsClassifier(n_neighbors=k)
-        for fold in range(num_folds):
 
-            # print(f"    {fold}")
-            mask = np.zeros(num_folds)
-            mask[fold] = True
-            training = np.ma.masked_array(folds, mask=mask)
-            training = np.concatenate(training[~training.mask])
-            validation = folds[fold]
+        model_perf.append([k, Classify(clf=knn_clf, folds=folds)])
 
-            X = np.array(training[:, :-1])
-            y = np.array(training[:, -1:].flatten())
-            
-
-            
-            knn_clf.fit(X, y)
-
-            predictions = knn_clf.predict(validation[:, :-1])
-            correct_count = 0
-            for i in range(len(predictions)):
-                if predictions[i] == validation[i, -1]:
-                    correct_count += 1
-            model_perf[k - k_min][1].append(correct_count / len(validation))
-
-    # print(model_perf)
-    best_perf = 0
-    best_index = 0
-    for item in model_perf:
-        perf = np.sum(item[1]) / num_folds
-        if perf > best_perf:
-            best_perf = perf
-            best_index = item[0]
-
-    training, test = dataframe[:train_index], dataframe[train_index:]
-    knn_clf = KNeighborsClassifier(n_neighbors=best_index)
-    X = np.array(training[:, :-1])
-    y = np.array(training[:, -1:].flatten())
-    
-    knn_clf.fit(X, y)
-
-    predictions = knn_clf.predict(test[:, :-1])
-    correct_count = 0
-    for i in range(len(predictions)):
-        if predictions[i] == test[i, -1]:
-            correct_count += 1
-    test_perf = correct_count / len(test)
+    return model_perf
 
 
-
-    print(f'Best accuracy with {num_folds}-fold validation is for {best_index}NN = {test_perf}')
-
-    return
-
-
-def DecisionTree(dataset, dtype=int, depth_min=1, depth_max=10, train_percent=80, num_folds=10):
-    dataframe = genfromtxt(dataset, delimiter=',', dtype=dtype)[1:]
-
-    train_index = round(len(dataframe) * train_percent / 100)
-
-    np.random.shuffle(dataframe)
-
-    folds = np.array_split(dataframe[:train_index], num_folds)
-
+def DecisionTree(folds, depth_min=1, depth_max=5):
     model_perf = []
     for depth in range(depth_min, depth_max + 1):
-        # print(depth)
-        model_perf.append([depth, []])
         dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=depth)
+        model_perf.append([depth, Classify(clf=dt_clf, folds=folds)])
 
-        for fold in range(num_folds):
+    return model_perf
 
-            # print(f"    {fold}")
-            mask = np.zeros(num_folds)
-            mask[fold] = True
-            training = np.ma.masked_array(folds, mask=mask)
-            training = np.concatenate(training[~training.mask])
-            validation = folds[fold]
+def BoostedDecisionTree(folds, depth_min=1, depth_max=5, n_estimators=50, learning_rate = 1.0):
+    model_perf = []
+    for depth in range(depth_min, depth_max + 1):
+        dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=depth)
+        boosted_clf = AdaBoostClassifier(dt_clf, n_estimators=n_estimators, learning_rate=learning_rate, random_state=0)
+        model_perf.append([depth, Classify(clf=boosted_clf, folds=folds)])
 
-            X = np.array(training[:, :-1])
-            y = np.array(training[:, -1:].flatten())
-            
+    return model_perf
 
-            
-            dt_clf.fit(X, y)
+def NeuralNet(folds, iter_min=1, iter_max=5):
+    model_perf = []
+    for iter in range(iter_min, iter_max + 1):
+        mlp_clf = MLPClassifier(random_state=0, max_iter=iter)
+        model_perf.append([iter, Classify(clf=mlp_clf, folds=folds)])
 
-            predictions = dt_clf.predict(validation[:, :-1])
-            correct_count = 0
-            for i in range(len(predictions)):
-                if predictions[i] == validation[i, -1]:
-                    correct_count += 1
-            model_perf[depth - depth_min][1].append(correct_count / len(validation))
-
-    # print(model_perf)
-    best_perf = 0
-    best_index = 0
-    for item in model_perf:
-        perf = np.sum(item[1]) / num_folds
-        if perf > best_perf:
-            best_perf = perf
-            best_index = item[0]
-        print(f"Accuracy with depth of {item[0]} is {perf}")
-
-    training, test = dataframe[:train_index], dataframe[train_index:]
-    dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=best_index)
-    X = np.array(training[:, :-1])
-    y = np.array(training[:, -1:].flatten())
-    
-    dt_clf.fit(X, y)
-
-    predictions = dt_clf.predict(test[:, :-1])
-    correct_count = 0
-    for i in range(len(predictions)):
-        if predictions[i] == test[i, -1]:
-            correct_count += 1
-    test_perf = correct_count / len(test)
+    return model_perf
 
 
-
-    print(f'Best accuracy with {num_folds}-fold validation is for DT with max depth of {best_index} = {test_perf}')
-
-    return
+###########################################################################################################
+################################   Running Section   ######################################################
+###########################################################################################################
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=VisibleDeprecationWarning)
-    KNN('data/breast-cancer-dataset.csv')
-    DecisionTree('data/breast-cancer-dataset.csv')
+    warnings.filterwarnings('ignore', category=ConvergenceWarning)
+    folds, test = Folds('data/breast-cancer-dataset.csv')
+    knn_output = KNN(folds=folds)
+    print(Test(knn_output, test=test))
+    dt_output = DecisionTree(folds=folds)
+    print(Test(dt_output, test=test))
+    boosted_output = BoostedDecisionTree(folds=folds)
+    print(Test(boosted_output, test=test))
+    mlp_output = NeuralNet(folds=folds)
+    print(Test(mlp_output, test=test))
