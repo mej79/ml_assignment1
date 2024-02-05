@@ -4,6 +4,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn import tree
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
 from numpy import VisibleDeprecationWarning, genfromtxt
 import numpy as np
 
@@ -31,7 +32,6 @@ def Classify(clf, folds):
             best_model = [clf, accuracy]
         
     return best_model
-
 
 def Folds(data_location, dtype=int, train_percent=80, num_folds=10):
     dataframe = genfromtxt(data_location, delimiter=',', dtype=dtype)[1:]
@@ -61,8 +61,6 @@ def Test(model_perf, test):
 
     return final_output
 
-
-
 def KNN(folds, k_min=1, k_max=5):
     model_perf = []
     for k in range(k_min, k_max + 1):
@@ -73,7 +71,6 @@ def KNN(folds, k_min=1, k_max=5):
 
     return model_perf
 
-
 def DecisionTree(folds, depth_min=1, depth_max=5):
     model_perf = []
     for depth in range(depth_min, depth_max + 1):
@@ -82,12 +79,12 @@ def DecisionTree(folds, depth_min=1, depth_max=5):
 
     return model_perf
 
-def BoostedDecisionTree(folds, depth_min=1, depth_max=5, n_estimators=50, learning_rate = 1.0):
+def BoostedDecisionTree(folds, estimators_min=1, estimators_max=5, depth=1, learning_rate = 1.0):
     model_perf = []
-    for depth in range(depth_min, depth_max + 1):
+    for n_estimators in range(estimators_min, estimators_max + 1):
         dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=depth)
         boosted_clf = AdaBoostClassifier(dt_clf, n_estimators=n_estimators, learning_rate=learning_rate, random_state=0)
-        model_perf.append([depth, Classify(clf=boosted_clf, folds=folds)])
+        model_perf.append([n_estimators, Classify(clf=boosted_clf, folds=folds)])
 
     return model_perf
 
@@ -96,6 +93,14 @@ def NeuralNet(folds, iter_min=1, iter_max=5):
     for iter in range(iter_min, iter_max + 1):
         mlp_clf = MLPClassifier(random_state=0, max_iter=iter)
         model_perf.append([iter, Classify(clf=mlp_clf, folds=folds)])
+
+    return model_perf
+
+def SVM(folds, iter_min=1, iter_max=5, function='rbf'):
+    model_perf = []
+    for iter in range(iter_min, iter_max + 1):
+        svm_clf = SVC(random_state=0, max_iter=iter, kernel=function)
+        model_perf.append([iter, Classify(clf=svm_clf, folds=folds)])
 
     return model_perf
 
@@ -116,3 +121,7 @@ with warnings.catch_warnings():
     print(Test(boosted_output, test=test))
     mlp_output = NeuralNet(folds=folds)
     print(Test(mlp_output, test=test))
+    svm_output = SVM(folds=folds)
+    print(Test(svm_output, test=test))
+    svm_output = SVM(folds=folds, function='poly')
+    print(Test(svm_output, test=test))
