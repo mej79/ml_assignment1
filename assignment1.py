@@ -177,6 +177,14 @@ def SVM(folds, iter_min=1, iter_max=5, function='rbf', to_print=False):
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=VisibleDeprecationWarning)
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
+    folds, test = Folds('data/apple_quality.csv')
+    training_results = Train(folds)
+
+    for result in training_results:
+        Plot(data=result)
+
+    plt.show()
+
     folds, test = Folds('data/diabetes_binary.csv')
     training_results = Train(folds)
 
