@@ -44,6 +44,45 @@ def Folds(data_location, dtype=int, train_percent=80, num_folds=10):
 
     return (np.array_split(training, num_folds), test)
 
+def Train(folds, knn=True, dt=True, boosted=True, mlp=True, svm=True, kernel_fns=['rbf', 'poly']):
+    results = []
+    if knn:
+        print('Starting KNN')
+        knn_output = KNN(folds=folds, k_max=75, to_print=True)
+        results.append(['K Nearest Neighbors', 'Neighbors',  Test(knn_output, test=test), Test(knn_output, test=np.concatenate(folds))])
+        print('Done')
+    
+    if dt:
+        print('Starting DT')
+        dt_output = DecisionTree(folds=folds, depth_max=80, to_print=True)
+        # dt_test_results = Test(dt_output, test=test)
+        results.append(['Decision Trees', 'Depth',  Test(dt_output, test=test), Test(dt_output, test=np.concatenate(folds))])
+        print('Done')
+    
+    if boosted:
+        print('Starting Boosted DT')
+        boosted_output = BoostedDecisionTree(folds=folds, estimators_max=75, to_print=True)
+        # boosted_test_results = Test(boosted_output, test=test)
+        results.append(['Boosted Decision Trees', 'Estimators',  Test(boosted_output, test=test), Test(boosted_output, test=np.concatenate(folds))])
+        print('Done')
+    
+    if mlp:
+        print('Starting Neural Nets')
+        mlp_output = NeuralNet(folds=folds, iter_max=60, to_print=True)
+        # mlp_test_results = Test(mlp_output, test=test)
+        results.append(['Multilevel Perceptron', 'Iterations',  Test(mlp_output, test=test), Test(mlp_output, test=np.concatenate(folds))])
+        print('Done')
+    
+    if svm:
+        for fn in kernel_fns:
+            print(f'Starting SVM- {fn}')
+            svm_output = SVM(folds=folds, iter_max=100, to_print=True, function=fn)
+            # svm_test_results = Test(svm_output, test=test)
+            results.append([f'Support Vector Machine- {fn}', 'Iterations', Test(svm_output, test=test), Test(svm_output, test=np.concatenate(folds))])
+            print('Done')
+        
+    return np.asarray(results)
+
 def Test(model_perf, test):
 
     final_output = []
@@ -63,53 +102,68 @@ def Test(model_perf, test):
 
     return np.asarray(final_output)
 
-def PlotError(model, data):
-    x = data[:,0]
-    y = data[:,1]
+def Plot(data):
+    name = data[0]
+    xlabel = data[1]
+    y1 = data[2][:,1]
+    x1 = data[2][:,0]
+    x2 = data[3][:,0]
+    y2 = data[3][:,1]
 
     fig, ax = plt.subplots()
-    ax.plot(x, y)
+    ax.plot(x1, y1, label='Test')
+    ax.plot(x2, y2, label='Train')
     ax.set_ylim(bottom=0)
-    ax.set_title(model)
+    ax.set(title=name, xlabel=xlabel, ylabel='Error')
+    ax.legend(title='Data')
 
-def KNN(folds, k_min=1, k_max=5):
+def KNN(folds, k_min=1, k_max=5, to_print=False):
     model_perf = []
     for k in range(k_min, k_max + 1):
-        # print(k)
+        if to_print:
+            print(f'k = {k}')
         knn_clf = KNeighborsClassifier(n_neighbors=k)
 
         model_perf.append([k, Classify(clf=knn_clf, folds=folds)])
 
     return model_perf
 
-def DecisionTree(folds, depth_min=1, depth_max=5):
+def DecisionTree(folds, depth_min=1, depth_max=5, to_print=False):
     model_perf = []
     for depth in range(depth_min, depth_max + 1):
+        if to_print:
+            print(f'depth = {depth}')
         dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=depth)
         model_perf.append([depth, Classify(clf=dt_clf, folds=folds)])
 
     return model_perf
 
-def BoostedDecisionTree(folds, estimators_min=1, estimators_max=5, depth=1, learning_rate = 1.0):
+def BoostedDecisionTree(folds, estimators_min=1, estimators_max=5, depth=1, learning_rate = 1.0, to_print=False):
     model_perf = []
     for n_estimators in range(estimators_min, estimators_max + 1):
+        if to_print:
+            print(f'n_estimators = {n_estimators}')
         dt_clf = tree.DecisionTreeClassifier(random_state=0, max_depth=depth)
         boosted_clf = AdaBoostClassifier(dt_clf, n_estimators=n_estimators, learning_rate=learning_rate, random_state=0)
         model_perf.append([n_estimators, Classify(clf=boosted_clf, folds=folds)])
 
     return model_perf
 
-def NeuralNet(folds, iter_min=1, iter_max=5):
+def NeuralNet(folds, iter_min=1, iter_max=5, to_print=False):
     model_perf = []
     for iter in range(iter_min, iter_max + 1):
+        if to_print:
+            print(f'iteration: {iter}')
         mlp_clf = MLPClassifier(random_state=0, max_iter=iter)
         model_perf.append([iter, Classify(clf=mlp_clf, folds=folds)])
 
     return model_perf
 
-def SVM(folds, iter_min=1, iter_max=5, function='rbf'):
+def SVM(folds, iter_min=1, iter_max=5, function='rbf', to_print=False):
     model_perf = []
     for iter in range(iter_min, iter_max + 1):
+        if to_print:
+            print(f'iteration: {iter}')
         svm_clf = SVC(random_state=0, max_iter=iter, kernel=function)
         model_perf.append([iter, Classify(clf=svm_clf, folds=folds)])
 
@@ -123,42 +177,10 @@ def SVM(folds, iter_min=1, iter_max=5, function='rbf'):
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=VisibleDeprecationWarning)
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
-    folds, test = Folds('data/apple_quality.csv')
-    # print(folds)
-    print('Starting KNN')
-    knn_output = KNN(folds=folds, k_max=25)
-    knn_test_results = Test(knn_output, test=test)
-    print('Done')
-    # print(knn_test_results)
-    print('Starting DT')
-    dt_output = DecisionTree(folds=folds, depth_max=20)
-    dt_test_results = Test(dt_output, test=test)
-    print('Done')
-    # print(dt_test_results)
-    print('Starting Boosted DT')
-    boosted_output = BoostedDecisionTree(folds=folds, estimators_max=25)
-    boosted_test_results = Test(boosted_output, test=test)
-    print('Done')
-    # print(boosted_test_results)
-    print('Starting Neural Nets')
-    mlp_output = NeuralNet(folds=folds, iter_max=25)
-    mlp_test_results = Test(mlp_output, test=test)
-    print('Done')
-    # print(mlp_test_results)
-    print('Starting SVM')
-    svm_output = SVM(folds=folds, iter_max=25)
-    svm_test_results = Test(svm_output, test=test)
-    print('Done')
-    # print(svm_test_results)
-    # svm_output = SVM(folds=folds, function='poly')
-    # print(Test(svm_output, test=test))
+    folds, test = Folds('data/diabetes_binary.csv')
+    training_results = Train(folds)
 
-
-    PlotError('KNN', knn_test_results)
-    PlotError('Decision Trees', dt_test_results)
-    PlotError('Boosted Decision Trees', boosted_test_results)
-    PlotError('Neural Network', mlp_test_results)
-    PlotError('Support Vector Machine', svm_test_results)
-
+    for result in training_results:
+        Plot(data=result)
 
     plt.show()
